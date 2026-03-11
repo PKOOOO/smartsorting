@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.39",
+    "@neondatabase/serverless": "^1.0.2",
     "ai": "^6.0.111",
     "next": "16.1.6",
     "openai": "^6.25.0",

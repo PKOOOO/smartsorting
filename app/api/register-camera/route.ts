@@ -13,17 +13,11 @@ export async function POST(req: NextRequest) {
     }
 
     await upsertCameraStatus(id, ip);
-
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    console.error("register-camera error:", err);
-    return NextResponse.json(
-      {
-        error: "Failed to register camera",
-        details: String(err?.message || err),
-      },
-      { status: 500 },
-    );
+    console.error("register-camera error (DB may be unreachable):", err);
+    // Return 200 so the ESP32 doesn't retry; IP will not be in DB until Neon is reachable
+    return NextResponse.json({ ok: false, error: "DB unreachable" });
   }
 }
 

@@ -9,10 +9,9 @@ export async function GET() {
     return NextResponse.json({ ip: status?.ip ?? null });
   } catch (err: any) {
     console.error("camera-info error:", err);
-    return NextResponse.json(
-      { ip: null, error: String(err?.message || err) },
-      { status: 500 },
-    );
+    // If the database is unreachable (e.g. no internet while connected to ESP32‑CAM AP),
+    // fall back gracefully instead of breaking the dashboard.
+    return NextResponse.json({ ip: null });
   }
 }
 

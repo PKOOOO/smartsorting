@@ -9,8 +9,9 @@ import { logClassification } from "@/lib/db";
 const model = gateway("google/gemini-2.5-flash");
 
 const ClassificationSchema = z.object({
-  label: z.enum(["cable", "phone", "battery", "pcb"]).catch("cable"),
-  confidence: z.number().min(0).max(1).optional().catch(0.8),
+  // Add an explicit "other" label for non‑e‑waste items
+  label: z.enum(["cable", "phone", "battery", "pcb", "other"]).catch("other"),
+  confidence: z.number().min(0).max(1).optional().catch(0.7),
   reason: z.string().optional().catch(""),
 });
 
@@ -36,8 +37,9 @@ export async function POST(req: NextRequest) {
               type: "text",
               text:
                 "You are an e‑waste sorting assistant. " +
-                'Classify the object in this photo into exactly one of: "cable", "phone", "battery", "pcb". ' +
-                "Return a JSON object with label, confidence (0–1), and a short reason.",
+                'Look at the object in this photo and classify it into exactly one of: "cable", "phone", "battery", "pcb", "other". ' +
+                'Use "other" for toys, people, food, furniture, or anything that is NOT clearly an electronic cable, phone, battery or PCB. ' +
+                "Return a JSON object with label, confidence (0–1), and a short reason. Be strict: if unsure, choose other.",
             },
             {
               type: "image",

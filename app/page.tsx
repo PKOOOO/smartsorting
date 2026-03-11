@@ -11,10 +11,23 @@ type Classification = {
   camera_url?: string | null;
 };
 
-const DEFAULT_CAM_URL = "http://192.168.1.41"; // Fallback if auto-detect fails
+const CAM_URL_STORAGE_KEY = "smartsorting-cam-url";
+
+function getStoredCamUrl(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(CAM_URL_STORAGE_KEY) || "";
+}
+
+// 10.42.x.x is often Linux hotspot / USB tethering — camera on that network can't be reached from your router's Wi‑Fi
+function isLikelyWrongNetwork(ip: string): boolean {
+  if (!ip || typeof ip !== "string") return true;
+  const trimmed = ip.replace(/^https?:\/\//i, "").split("/")[0].trim();
+  return trimmed.startsWith("10.42.");
+}
 
 export default function Home() {
-  const [camUrl, setCamUrl] = useState<string>("");
+  const [camUrl, setCamUrl] = useState<string>(() => getStoredCamUrl());
+  const [reportedIp, setReportedIp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -22,23 +35,34 @@ export default function Home() {
   const [history, setHistory] = useState<Classification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastBase64, setLastBase64] = useState<string | null>(null);
+  const [binOpen, setBinOpen] = useState(false);
+  const [closingBin, setClosingBin] = useState(false);
+
+  // Persist camera URL so you never have to type it again
+  useEffect(() => {
+    if (camUrl.trim()) {
+      localStorage.setItem(CAM_URL_STORAGE_KEY, camUrl.trim());
+    }
+  }, [camUrl]);
 
   useEffect(() => {
     async function init() {
+      const stored = getStoredCamUrl();
+      if (stored) setCamUrl(stored);
+
       try {
         const res = await fetch("/api/camera-info", { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as { ip?: string | null };
-          if (data.ip && typeof data.ip === "string") {
-            setCamUrl(data.ip);
-          } else {
-            setCamUrl(DEFAULT_CAM_URL);
+          const raw = data.ip && typeof data.ip === "string" ? data.ip : "";
+          setReportedIp(raw || null);
+          if (raw && !isLikelyWrongNetwork(raw)) {
+            setCamUrl(raw);
           }
-        } else {
-          setCamUrl(DEFAULT_CAM_URL);
+          // If API returned nothing or wrong network, keep stored URL
         }
       } catch {
-        setCamUrl(DEFAULT_CAM_URL);
+        // Keep stored URL on network error
       }
 
       void loadHistory();
@@ -55,6 +79,39 @@ export default function Home() {
       setHistory(data);
     } catch {
       // ignore history errors in UI
+    }
+  }
+
+  async function refreshCameraIp() {
+    try {
+      const res = await fetch("/api/camera-info", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { ip?: string | null };
+      const raw = data.ip && typeof data.ip === "string" ? data.ip : "";
+      setReportedIp(raw || null);
+      if (raw && !isLikelyWrongNetwork(raw)) {
+        setCamUrl(raw);
+      }
+    } catch {
+      // keep current state
+    }
+  }
+
+  async function saveCurrentUrlAsCameraIp() {
+    const url = camUrl.trim();
+    if (!url) return;
+    try {
+      const res = await fetch("/api/register-camera", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "cam-1", ip: url }),
+      });
+      if (res.ok) {
+        setReportedIp(url);
+        await refreshCameraIp();
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -111,11 +168,72 @@ export default function Home() {
       const data = (await classifyRes.json()) as Classification;
       setCurrent(data);
       void loadHistory();
+
+      // Open the correct bin servo (stays open until user clicks Close Bin)
+      try {
+        const label = data.label;
+        const ewasteLabels = ["cable", "phone", "battery", "pcb"];
+        const reasonText = (data.reason || "").toLowerCase();
+        const electronicWords = [
+          "router",
+          "modem",
+          "monitor",
+          "screen",
+          "tv",
+          "laptop",
+          "computer",
+          "keyboard",
+          "mouse",
+          "charger",
+          "adapter",
+          "console",
+          "printer",
+          "hard drive",
+          "hdd",
+          "ssd",
+          "disk",
+          "drive",
+          "storage",
+          "electronic",
+          "device",
+        ];
+        const looksElectronic = electronicWords.some((word) =>
+          reasonText.includes(word),
+        );
+
+        const toyWords = ["toy", "plush", "doll", "stuffed", "teddy"];
+        const isToy = toyWords.some((word) => reasonText.includes(word));
+
+        const isEwaste =
+          !isToy && (ewasteLabels.includes(label) || looksElectronic);
+        const binParam = isEwaste ? "ewaste" : "other";
+
+        await fetch(`${camUrl.replace(/\/$/, "")}/servo?bin=${binParam}`, {
+          method: "GET",
+        });
+        setBinOpen(true);
+      } catch (servoErr) {
+        console.warn("Servo trigger failed:", servoErr);
+      }
     } catch (err: any) {
       console.error(err);
       setError(String(err?.message || err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCloseBin() {
+    try {
+      setClosingBin(true);
+      await fetch(`${camUrl.replace(/\/$/, "")}/servo-close`, {
+        method: "GET",
+      });
+      setBinOpen(false);
+    } catch (err) {
+      console.warn("Close bin failed:", err);
+    } finally {
+      setClosingBin(false);
     }
   }
 
@@ -159,15 +277,59 @@ export default function Home() {
               <label className="block text-xs font-medium uppercase tracking-wide text-zinc-400">
                 ESP32‑CAM URL
               </label>
-              <input
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-                value={camUrl}
-                onChange={(e) => setCamUrl(e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none ring-0 transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+                  value={camUrl}
+                  onChange={(e) => setCamUrl(e.target.value)}
+                  placeholder="http://192.168.1.149"
+                />
+                <button
+                  type="button"
+                  onClick={refreshCameraIp}
+                  className="shrink-0 rounded-xl border border-zinc-600 bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700"
+                >
+                  Refresh IP
+                </button>
+              </div>
               <p className="text-xs text-zinc-500">
-                Example: <code>http://192.168.1.41</code> — your camera&apos;s IP
-                on the same Wi‑Fi.
+                Example: <code>http://192.168.1.23</code> — your camera&apos;s IP
+                on the same Wi‑Fi. Saved in this browser so you won&apos;t need
+                to enter it again.
               </p>
+              {!camUrl && !reportedIp && (
+                <p className="text-xs text-zinc-400">
+                  Connect ESP32‑CAM to your router Wi‑Fi, reboot it, then click{" "}
+                  <strong>Refresh IP</strong>. Or enter the URL once — we&apos;ll
+                  remember it.
+                </p>
+              )}
+              {reportedIp &&
+                isLikelyWrongNetwork(reportedIp) &&
+                !camUrl.trim() && (
+                <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200/90">
+                  <p>
+                    <strong>Where the wrong IP comes from:</strong> The ESP32‑CAM
+                    sends its current IP to this app when it boots. That value is
+                    stored in the database. The stored IP{" "}
+                    <code className="rounded bg-black/20 px-1">{reportedIp}</code>{" "}
+                    means the camera was last connected to a different network
+                    (e.g. phone hotspot or “Share internet”) that uses 10.42.x.x.
+                  </p>
+                  <p>
+                    Put the correct URL above (e.g. http://192.168.1.149), then
+                    click{" "}
+                    <button
+                      type="button"
+                      onClick={saveCurrentUrlAsCameraIp}
+                      className="font-semibold underline focus:outline-none focus:ring-2 focus:ring-amber-400 rounded"
+                    >
+                      Save as camera IP
+                    </button>{" "}
+                    so the database is updated and this message goes away.
+                  </p>
+                </div>
+                )}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
@@ -271,9 +433,18 @@ export default function Home() {
                     Suggested bin
                   </p>
                   <p className="mt-1 text-sm font-semibold text-emerald-100">
-                    {binForLabel(current.label)}
+                    {suggestedBin(current.label, current.reason)}
                   </p>
                 </div>
+                {binOpen && (
+                  <button
+                    onClick={handleCloseBin}
+                    disabled={closingBin}
+                    className="w-full rounded-full bg-red-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-400 disabled:cursor-not-allowed disabled:bg-red-700"
+                  >
+                    {closingBin ? "Closing…" : "Close Bin"}
+                  </button>
+                )}
               </div>
             ) : (
               <p className="text-sm text-zinc-500">
@@ -285,65 +456,50 @@ export default function Home() {
           </div>
         </section>
 
-        {/* History */}
-        <section className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 shadow-sm backdrop-blur sm:mb-8 sm:p-5">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300">
-              Recent classifications
-            </h2>
-            {history.length > 0 && (
-              <span className="text-xs text-zinc-500">
-                Showing last {history.length} samples
-              </span>
-            )}
-          </div>
-          {history.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-500">
-              No history yet. Classify a few items to build a timeline for your
-              demo.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-1.5 text-sm">
-              {history.map((h) => (
-                <li
-                  key={h.id ?? `${h.label}-${h.created_at}`}
-                  className="flex items-baseline justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2"
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">
-                        {h.label}
-                      </span>
-                      {h.confidence != null && (
-                        <span className="text-[11px] text-zinc-400">
-                          {(h.confidence * 100).toFixed(0)}% confident
-                        </span>
-                      )}
-                    </div>
-                    {h.reason && (
-                      <span className="text-xs text-zinc-400 line-clamp-2">
-                        {h.reason}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-right text-[11px] text-zinc-500">
-                    {h.created_at && (
-                      <div>
-                        {new Date(h.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        
       </main>
     </div>
   );
+}
+
+function suggestedBin(label: string, reason?: string | null): string {
+  const base = binForLabel(label);
+  if (label !== "other") return base;
+
+  const text = (reason || "").toLowerCase();
+  const electronicWords = [
+    "router",
+    "modem",
+    "monitor",
+    "screen",
+    "tv",
+    "laptop",
+    "computer",
+    "keyboard",
+    "mouse",
+    "charger",
+    "adapter",
+    "console",
+    "printer",
+    "hard drive",
+    "hdd",
+    "ssd",
+    "disk",
+    "drive",
+    "storage",
+    "electronic",
+    "device",
+  ];
+  const looksElectronic = electronicWords.some((word) => text.includes(word));
+
+  const toyWords = ["toy", "plush", "doll", "stuffed", "teddy"];
+  const isToy = toyWords.some((word) => text.includes(word));
+
+  if (looksElectronic && !isToy) {
+    return "Electronics / E‑waste Bin";
+  }
+
+  return base;
 }
 
 function binForLabel(label: string): string {
@@ -356,6 +512,8 @@ function binForLabel(label: string): string {
       return "Battery Recycling Bin";
     case "pcb":
       return "Electronic Scrap / PCB Bin";
+    case "other":
+      return "Non‑e‑waste / General Bin";
     default:
       return "Manual inspection";
   }
