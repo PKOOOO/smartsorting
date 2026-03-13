@@ -208,7 +208,7 @@ export default function Home() {
 
       // Open the correct bin servo (stays open until user clicks Close Bin)
       try {
-        const ewasteLabels = ["cable", "phone", "battery", "pcb"];
+        const ewasteLabels = ["cable", "phone", "battery", "pcb", "other-electronic"];
         const isEwaste = ewasteLabels.includes(data.label);
         const binParam = isEwaste ? "ewaste" : "other";
 
@@ -478,10 +478,12 @@ function binForLabel(label: string): string {
       return "Battery Recycling Bin";
     case "pcb":
       return "Electronic Scrap / PCB Bin";
-    case "other":
+    case "other-electronic":
+      return "Electronics / E‑waste Bin";
+    case "other-nonelectronic":
       return "Non‑e‑waste / General Bin";
     default:
-      return "Manual inspection";
+      return "Non‑e‑waste / General Bin";
   }
 }
 
