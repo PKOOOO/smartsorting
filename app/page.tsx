@@ -208,19 +208,8 @@ export default function Home() {
 
       // Open the correct bin servo (stays open until user clicks Close Bin)
       try {
-        const label = data.label;
         const ewasteLabels = ["cable", "phone", "battery", "pcb"];
-        const reasonText = (data.reason || "").toLowerCase();
-
-        const looksElectronic = ELECTRONIC_WORDS.some((word) =>
-          reasonText.includes(word),
-        );
-        const isNonElectronic = NON_ELECTRONIC_WORDS.some((word) =>
-          reasonText.includes(word),
-        );
-
-        const isEwaste =
-          !isNonElectronic && (ewasteLabels.includes(label) || looksElectronic);
+        const isEwaste = ewasteLabels.includes(data.label);
         const binParam = isEwaste ? "ewaste" : "other";
 
         await fetch(`${camUrl.replace(/\/$/, "")}/servo?bin=${binParam}`, {
@@ -475,19 +464,8 @@ export default function Home() {
   );
 }
 
-function suggestedBin(label: string, reason?: string | null): string {
-  const base = binForLabel(label);
-  if (label !== "other") return base;
-
-  const text = (reason || "").toLowerCase();
-  const looksElectronic = ELECTRONIC_WORDS.some((word) => text.includes(word));
-  const isNonElectronic = NON_ELECTRONIC_WORDS.some((word) => text.includes(word));
-
-  if (looksElectronic && !isNonElectronic) {
-    return "Electronics / E‑waste Bin";
-  }
-
-  return base;
+function suggestedBin(label: string, _reason?: string | null): string {
+  return binForLabel(label);
 }
 
 function binForLabel(label: string): string {
