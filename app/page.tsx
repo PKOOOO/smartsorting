@@ -307,28 +307,28 @@ export default function Home() {
               {reportedIp &&
                 isLikelyWrongNetwork(reportedIp) &&
                 !camUrl.trim() && (
-                <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200/90">
-                  <p>
-                    <strong>Where the wrong IP comes from:</strong> The ESP32‑CAM
-                    sends its current IP to this app when it boots. That value is
-                    stored in the database. The stored IP{" "}
-                    <code className="rounded bg-black/20 px-1">{reportedIp}</code>{" "}
-                    means the camera was last connected to a different network
-                    (e.g. phone hotspot or “Share internet”) that uses 10.42.x.x.
-                  </p>
-                  <p>
-                    Put the correct URL above (e.g. http://192.168.1.149), then
-                    click{" "}
-                    <button
-                      type="button"
-                      onClick={saveCurrentUrlAsCameraIp}
-                      className="font-semibold underline focus:outline-none focus:ring-2 focus:ring-amber-400 rounded"
-                    >
-                      Save as camera IP
-                    </button>{" "}
-                    so the database is updated and this message goes away.
-                  </p>
-                </div>
+                  <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200/90">
+                    <p>
+                      <strong>Where the wrong IP comes from:</strong> The ESP32‑CAM
+                      sends its current IP to this app when it boots. That value is
+                      stored in the database. The stored IP{" "}
+                      <code className="rounded bg-black/20 px-1">{reportedIp}</code>{" "}
+                      means the camera was last connected to a different network
+                      (e.g. phone hotspot or “Share internet”) that uses 10.42.x.x.
+                    </p>
+                    <p>
+                      Put the correct URL above (e.g. http://192.168.1.149), then
+                      click{" "}
+                      <button
+                        type="button"
+                        onClick={saveCurrentUrlAsCameraIp}
+                        className="font-semibold underline focus:outline-none focus:ring-2 focus:ring-amber-400 rounded"
+                      >
+                        Save as camera IP
+                      </button>{" "}
+                      so the database is updated and this message goes away.
+                    </p>
+                  </div>
                 )}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -456,7 +456,7 @@ export default function Home() {
           </div>
         </section>
 
-        
+
       </main>
     </div>
   );
@@ -489,10 +489,11 @@ function suggestedBin(label: string, reason?: string | null): string {
     "storage",
     "electronic",
     "device",
+    "anythingElectronic"
   ];
   const looksElectronic = electronicWords.some((word) => text.includes(word));
 
-  const toyWords = ["toy", "plush", "doll", "stuffed", "teddy"];
+  const toyWords = ["toy", "plush", "doll", "stuffed", "teddy", "non-electronic", "other"];
   const isToy = toyWords.some((word) => text.includes(word));
 
   if (looksElectronic && !isToy) {
