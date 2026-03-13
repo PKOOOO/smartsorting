@@ -3,13 +3,9 @@ import { z } from "zod";
 import { generateObject, gateway } from "ai";
 import { logClassification } from "@/lib/db";
 
-// Mirror how your portfolio-ai project uses Vercel AI:
-// the `gateway()` helper reads AI_GATEWAY_API_KEY from .env
-// and routes through Vercel AI Gateway, not OpenAI directly.
 const model = gateway("google/gemini-2.5-flash");
 
 const ClassificationSchema = z.object({
-  // Add an explicit "other" label for non‑e‑waste items
   label: z.enum(["cable", "phone", "battery", "pcb", "other"]).catch("other"),
   confidence: z.number().min(0).max(1).optional().catch(0.7),
   reason: z.string().optional().catch(""),
@@ -37,13 +33,18 @@ export async function POST(req: NextRequest) {
               type: "text",
               text:
                 "You are an e‑waste sorting assistant. " +
-                'Look at the object in this photo and classify it into exactly one of: "cable", "phone", "battery", "pcb", "other". ' +
-                'Use "other" for toys, people, food, furniture, or anything that is NOT clearly an electronic cable, phone, battery or PCB. ' +
-                "Return a JSON object with label, confidence (0–1), and a short reason. Be strict: if unsure, choose other.",
+                'Classify the object in this photo into exactly one of: "cable", "phone", "battery", "pcb", "other".\n\n' +
+                "Category rules:\n" +
+                '- "cable": ANY cable, wire, charger, wall charger, wall adapter, power adapter, power brick, USB plug, power supply, charging block, or anything used to charge or transmit power/data\n' +
+                '- "phone": smartphones, mobile phones, tablets, handheld electronic devices\n' +
+                '- "battery": any battery, power bank, rechargeable cell, AA/AAA/lithium battery\n' +
+                '- "pcb": circuit boards, motherboards, PCBs, electronic components mounted on a board\n' +
+                '- "other": ONLY for non-electronic items — toys, food, furniture, clothing, keys, toothpaste, or items with zero electronic function\n\n' +
+                "Important: chargers and power adapters are ALWAYS classified as \"cable\", not \"other\".\n" +
+                "Return a JSON object with label, confidence (0–1), and a short reason.",
             },
             {
               type: "image",
-              // Gemini via gateway accepts data URLs; this keeps types happy
               image: `data:image/jpeg;base64,${imageBase64}`,
             },
           ],
@@ -57,7 +58,6 @@ export async function POST(req: NextRequest) {
       reason: object.reason,
     };
 
-    // Fire-and-forget DB logging; errors here should not break the response.
     logClassification({
       label: result.label,
       confidence: result.confidence,
@@ -79,4 +79,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
