@@ -13,6 +13,43 @@ type Classification = {
 
 const CAM_URL_STORAGE_KEY = "smartsorting-cam-url";
 
+// Shared constants — edit in ONE place only
+const ELECTRONIC_WORDS = [
+  "router",
+  "modem",
+  "monitor",
+  "screen",
+  "tv",
+  "laptop",
+  "computer",
+  "keyboard",
+  "mouse",
+  "charger",
+  "adapter",
+  "console",
+  "printer",
+  "hard drive",
+  "hdd",
+  "ssd",
+  "disk",
+  "drive",
+  "storage",
+  "electronic",
+];
+
+const NON_ELECTRONIC_WORDS = [
+  "toy",
+  "plush",
+  "doll",
+  "stuffed",
+  "teddy",
+  "toothpaste",
+  "food",
+  "furniture",
+  "clothing",
+  "non-electronic",
+];
+
 function getStoredCamUrl(): string {
   if (typeof window === "undefined") return "";
   return localStorage.getItem(CAM_URL_STORAGE_KEY) || "";
@@ -174,38 +211,16 @@ export default function Home() {
         const label = data.label;
         const ewasteLabels = ["cable", "phone", "battery", "pcb"];
         const reasonText = (data.reason || "").toLowerCase();
-        const electronicWords = [
-          "router",
-          "modem",
-          "monitor",
-          "screen",
-          "tv",
-          "laptop",
-          "computer",
-          "keyboard",
-          "mouse",
-          "charger",
-          "adapter",
-          "console",
-          "printer",
-          "hard drive",
-          "hdd",
-          "ssd",
-          "disk",
-          "drive",
-          "storage",
-          "electronic",
-          "device",
-        ];
-        const looksElectronic = electronicWords.some((word) =>
+
+        const looksElectronic = ELECTRONIC_WORDS.some((word) =>
+          reasonText.includes(word),
+        );
+        const isNonElectronic = NON_ELECTRONIC_WORDS.some((word) =>
           reasonText.includes(word),
         );
 
-        const toyWords = ["toy", "plush", "doll", "stuffed", "teddy"];
-        const isToy = toyWords.some((word) => reasonText.includes(word));
-
         const isEwaste =
-          !isToy && (ewasteLabels.includes(label) || looksElectronic);
+          !isNonElectronic && (ewasteLabels.includes(label) || looksElectronic);
         const binParam = isEwaste ? "ewaste" : "other";
 
         await fetch(`${camUrl.replace(/\/$/, "")}/servo?bin=${binParam}`, {
@@ -314,7 +329,7 @@ export default function Home() {
                       stored in the database. The stored IP{" "}
                       <code className="rounded bg-black/20 px-1">{reportedIp}</code>{" "}
                       means the camera was last connected to a different network
-                      (e.g. phone hotspot or “Share internet”) that uses 10.42.x.x.
+                      (e.g. phone hotspot or "Share internet") that uses 10.42.x.x.
                     </p>
                     <p>
                       Put the correct URL above (e.g. http://192.168.1.149), then
@@ -455,8 +470,6 @@ export default function Home() {
             )}
           </div>
         </section>
-
-
       </main>
     </div>
   );
@@ -467,36 +480,10 @@ function suggestedBin(label: string, reason?: string | null): string {
   if (label !== "other") return base;
 
   const text = (reason || "").toLowerCase();
-  const electronicWords = [
-    "router",
-    "modem",
-    "monitor",
-    "screen",
-    "tv",
-    "laptop",
-    "computer",
-    "keyboard",
-    "mouse",
-    "charger",
-    "adapter",
-    "console",
-    "printer",
-    "hard drive",
-    "hdd",
-    "ssd",
-    "disk",
-    "drive",
-    "storage",
-    "electronic",
-    "device",
-    "anythingElectronic"
-  ];
-  const looksElectronic = electronicWords.some((word) => text.includes(word));
+  const looksElectronic = ELECTRONIC_WORDS.some((word) => text.includes(word));
+  const isNonElectronic = NON_ELECTRONIC_WORDS.some((word) => text.includes(word));
 
-  const toyWords = ["toy", "plush", "doll", "stuffed", "teddy", "non-electronic", "other"];
-  const isToy = toyWords.some((word) => text.includes(word));
-
-  if (looksElectronic && !isToy) {
+  if (looksElectronic && !isNonElectronic) {
     return "Electronics / E‑waste Bin";
   }
 
@@ -532,4 +519,3 @@ function blobToBase64(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
-
